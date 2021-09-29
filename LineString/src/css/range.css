@@ -1,0 +1,16 @@
+.slidebar-multithumb {
+    display: grid;
+    padding: 1rem;
+  }
+  
+  .slidebar-multithumb input[type="range"] {
+    grid-column: 1;
+    grid-row: 2;
+    /* <input type="range">全体の操作を無効にする */
+    pointer-events: none;
+  }
+  
+  .slidebar-multithumb ::-webkit-slider-thumb {
+    /* つまみ部分を示す疑似要素-webkit-slider-thumbで、つまみだけ操作できるようにする */
+    pointer-events: auto;
+  }
