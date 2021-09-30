@@ -1,16 +1,45 @@
 .slidebar-multithumb {
-    display: grid;
-    padding: 1rem;
-  }
+  display: grid;
+  padding: 1rem;
+}
   
-  .slidebar-multithumb input[type="range"] {
-    grid-column: 1;
-    grid-row: 2;
-    /* <input type="range">全体の操作を無効にする */
-    pointer-events: none;
-  }
+ .slidebar-multithumb input[type="range"] {
+  grid-column: 1;
+  grid-row: 2;
+  /* <input type="range">全体の操作を無効にする */
+  pointer-events: none;
+ }
   
-  .slidebar-multithumb ::-webkit-slider-thumb {
-    /* つまみ部分を示す疑似要素-webkit-slider-thumbで、つまみだけ操作できるようにする */
-    pointer-events: auto;
-  }
+.slidebar-multithumb ::-webkit-slider-thumb {
+  /* つまみ部分を示す疑似要素-webkit-slider-thumbで、つまみだけ操作できるようにする */
+  pointer-events: auto;
+}
+
+
+
+/* 最初のつまみを上にする(順番をわかりやすくするため) */
+.thumb-2 {
+  z-index: 1;
+}
+
+/* 色設定 */
+:root {
+  --bg: rgb(224, 224, 224);
+  --bar: rgb(0, 255, 0);
+}
+
+/* それぞれのつまみの設定 */
+/*
+.thumb-1::-webkit-slider-thumb {
+  background: rgb(255, 255, 255);
+  box-shadow: -100vw 0 0 100vw var(--bg);
+}
+*/
+/* つまみの溝の背景。thumb-1をnoneにすることで後ろのthumb-2が表示される */
+.thumb-1::-webkit-slider-runnable-track {
+  background: var(--bg);
+}
+
+.thumb-2::-webkit-slider-runnable-track {
+  background: none;
+}
