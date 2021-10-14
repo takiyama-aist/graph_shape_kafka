@@ -4,10 +4,14 @@ const { Kafka } = require("kafkajs");
  * Parameters
  */
 // グラフデータ
-let g_jsonLineStrings = [[]];
+let g_jsonGeometories = [[]];
 
 // グラフ線の色
 const g_colors = ["#4E79A7","#F28E2B","#E15759","#76B7B2","#59A14F","#EDC948","#B07AA1","#FF9DA7","#9C755F","#BAB0AC"];
+// グラフ塗りつぶし色
+const g_colorsBackGround = ["#CCD8E5","#FBDEC2","#F6CFCF","#D7EAE9","#CFE4CC","#F9EFCA","#E8D9E4","#FFE3E5","#E2D7D1","#EBE8E7"];
+// 白色
+const g_colorWhite = "#FFFFFF";
 
 /**
  * Global variable
@@ -45,7 +49,7 @@ function onLoad() {
 }
 
 /**
- * Kafka COnsumer起動
+ * Kafka Consumer起動
  */
 async function kafkaConsumer() {
     const kafka = new Kafka({
@@ -70,7 +74,7 @@ async function kafkaConsumer() {
             // 受信データからGeoJSON配列作成
             pushGeoJSONData(message);
             // グラフ描画（パラメータ：表示位置のスライダーmin値、スライダーmax値）
-            createGraph(g_sliderLow, g_jsonLineStrings.length - 1, 0, 0, true);
+            createGraph(g_sliderLow, g_jsonGeometories.length - 1, 0, 0, true);
         },
     });
 }
@@ -82,19 +86,19 @@ async function kafkaConsumer() {
 function pushGeoJSONData(msg) {
     const stringfyMsg = JSON.stringify(msg.value.toString());
     const objMsg = JSON.parse(stringfyMsg);
-    const objLineString = JSON.parse(objMsg);
-    const timestamp = objLineString.properties.timestamp;
+    const objGeometry = JSON.parse(objMsg);
+    const timestamp = objGeometry.properties.timestamp;
     // タイムスタンプに変更がなければ
     if (timestamp == g_timestamp) {
         // GeoJSONデータ保存
-        g_jsonLineStrings[g_jsonIndex].push(objLineString);
+        g_jsonGeometories[g_jsonIndex].push(objGeometry);
     }
     // タイムスタンプに変更がある
     else {
         // データ保存容量を超える
         if (g_jsonIndex + 1 >= DATA_LIMIT) {
             // 先頭のデータを削除
-            g_jsonLineStrings.shift();
+            g_jsonGeometories.shift();
         }
         // データ保存容量を超えない
         else {
@@ -103,8 +107,8 @@ function pushGeoJSONData(msg) {
         // タイムスタンプ更新
         g_timestamp = timestamp;
         // GeoJSONデータ保存
-        g_jsonLineStrings[g_jsonIndex] = [];
-        g_jsonLineStrings[g_jsonIndex].push(objLineString);
+        g_jsonGeometories[g_jsonIndex] = [];
+        g_jsonGeometories[g_jsonIndex].push(objGeometry);
     }
 }
 
@@ -194,6 +198,161 @@ function getColorIndex(oId, arrColorsOid) {
 }
 
 /**
+ * 多重Polygonの表示順序（前面／背面）設定
+ * @param {number} order 設定中Geometryの何番目か
+ * @param {Object} datasets dataset配列
+ * @param {number} index dataset配列のインデックス
+ * @param {array} x_min X座病最小値の配列
+ * @param {array} x_max X座病最大値の配列
+ * @param {string} color 塗りつぶし色
+ */
+function setGeometryOrder(order, datasets, index, x_min, x_max, color) {
+    // Geometryが複数の場合
+    if (order > 0) {
+        // 面積（X座標の範囲）が小さければ前面に表示
+        if ((x_max[order] - x_min[order]) < (x_max[order-1] - x_min[order-1])) {
+            datasets[index].order = 1;      // 前面
+            datasets[index].backgroundColor = g_colorWhite;
+            datasets[index-1].order = 2;    // 背面
+            datasets[index-1].backgroundColor = color;
+        }
+        // 面積（X座標の範囲）が大きければ背面に表示
+        else {
+            datasets[index].order = 2;      // 背面
+            datasets[index].backgroundColor = color;
+            datasets[index-1].order = 1;    // 前面
+            datasets[index-1].backgroundColor = g_colorWhite;
+        }
+    }
+    // Geometryが1個のみの場合
+    else {
+        datasets[index].backgroundColor = g_colorsBackGround[getColorIndex(oId, arrOidColors)];
+    }
+}
+
+/**
+ * LineString の dataObj.datasets を設定する
+ * @param {Object} dataObj dataObj
+ * @param {array} objLineStrings LineStringのGeoJSONデータ
+ * @param {array} arrOidTimestamp OIDを格納しているg_colorsに対応する配列（そのOIDがどの色か）
+ * @param {array} arrOidColors  OIDを格納しているg_colorsに対応する配列（そのOIDがどの色か）
+ * @param {number} indexData datasetsのインデックス
+ * @param {array} x xの配列
+ * @param {array} y yの配列
+ * @returns {number} indexData
+ */
+function setLineStringDatasets(dataObj, objLineStrings, arrOidTimestamp, arrOidColors, indexData, x, y) {
+    // OIDとタイムスタンプを一旦保存
+    setOidTimstampToObj(
+        arrOidTimestamp, objLineStrings.properties.oID, objLineStrings.properties.timestamp);
+    dataObj.datasets[indexData] = new Object();
+    let oId = objLineStrings.properties.oID;
+    dataObj.datasets[indexData].label = 'oID:' + oId;
+    dataObj.datasets[indexData].data = [];
+    // Coordinateを取得 
+    for (let k = 0; k < objLineStrings.geometry.coordinates.length; k++) {
+        x.push(objLineStrings.geometry.coordinates[k][0]);
+        y.push(objLineStrings.geometry.coordinates[k][1]);
+        let data = new Object();
+        data.x = objLineStrings.geometry.coordinates[k][0];
+        data.y = objLineStrings.geometry.coordinates[k][1];
+        dataObj.datasets[indexData].data.push(data);
+    }
+    // Geometryの各種表示用設定
+    dataObj.datasets[indexData].borderColor = g_colors[getColorIndex(oId, arrOidColors)];
+    dataObj.datasets[indexData].borderWidth = 2;
+    dataObj.datasets[indexData].pointBackgroundColor = g_colors[getColorIndex(oId, arrOidColors)];
+    dataObj.datasets[indexData].pointBorderColor = g_colors[getColorIndex(oId, arrOidColors)];
+    dataObj.datasets[indexData].pointRadius = 1;
+    dataObj.datasets[indexData].pointHoverRadius = 1;
+    dataObj.datasets[indexData].fill = false;
+    dataObj.datasets[indexData].tension = 0;
+    dataObj.datasets[indexData].showLine = true;   
+    return indexData;
+}
+
+/**
+ * Polygon の dataObj.datasets を設定する
+ * @param {Object} dataObj dataObj
+ * @param {array} objPolygon PolygonのGeoJSONデータ
+ * @param {array} arrOidTimestamp OIDを格納しているg_colorsに対応する配列（そのOIDがどの色か）
+ * @param {array} arrOidColors  OIDを格納しているg_colorsに対応する配列（そのOIDがどの色か）
+ * @param {number} indexData datasetsのインデックス
+ * @param {array} x xの配列
+ * @param {array} y yの配列
+ * @returns {number} indexData
+ */
+function setPolygonDatasets(dataObj, objPolygon, arrOidTimestamp, arrOidColors, indexData, x, y) {
+    // OIDとタイムスタンプを一旦保存
+    setOidTimstampToObj(
+        arrOidTimestamp, objPolygon.properties.oID, objPolygon.properties.timestamp);
+    let rest_flag = true;
+    let k = 0;
+    let x_max = [Number.MIN_VALUE, Number.MIN_VALUE];
+    let x_min = [Number.MAX_VALUE, Number.MAX_VALUE];
+    let order = 0;
+    while (rest_flag) {
+        dataObj.datasets[indexData] = new Object();
+        let oId = objPolygon.properties.oID;
+        dataObj.datasets[indexData].label = 'oID:' + oId;
+        dataObj.datasets[indexData].data = [];
+        rest_flag = false
+        // Coordinateを取得
+        for (let k_org = k; k < objPolygon.geometry.coordinates.length; k++) {
+            let valueX = objPolygon.geometry.coordinates[k][0];
+            let valueY = objPolygon.geometry.coordinates[k][1];
+            x.push(valueX);
+            y.push(valueY);
+            let data = new Object();
+            data.x = valueX;
+            data.y = valueY;
+            dataObj.datasets[indexData].data.push(data);
+            // Xの最大値保存
+            if (x_max[order] < valueX) {
+                x_max[order] = valueX;
+            }
+            // Xの最小値保存
+            if (x_min[order] > valueX) {
+                x_min[order] = valueX;
+            }
+            // 始点と終点が同一
+            if (k_org != k) {
+                if (objPolygon.geometry.coordinates[k_org][0] === objPolygon.geometry.coordinates[k][0]
+                    && objPolygon.geometry.coordinates[k_org][1] === objPolygon.geometry.coordinates[k][1]) {
+                    // 最後のCoordinateではない
+                    if (objPolygon.geometry.coordinates.length > (k + 1)) {
+                        k++;
+                        rest_flag = true;
+                        break;
+                    }
+                }
+            }
+        }
+        // Geometryの各種表示用設定
+        dataObj.datasets[indexData].borderColor = g_colors[getColorIndex(oId, arrOidColors)];
+        dataObj.datasets[indexData].borderWidth = 2;
+        dataObj.datasets[indexData].pointBackgroundColor = g_colors[getColorIndex(oId, arrOidColors)];
+        dataObj.datasets[indexData].pointBorderColor = g_colors[getColorIndex(oId, arrOidColors)];
+        dataObj.datasets[indexData].pointRadius = 1;
+        dataObj.datasets[indexData].pointHoverRadius = 1;
+        dataObj.datasets[indexData].fill = true;
+        dataObj.datasets[indexData].tension = 0;
+        dataObj.datasets[indexData].showLine = true;
+        // 続きがある
+        if (rest_flag) {                        
+            indexData++;
+            order++;
+        }
+        // 続きが無い
+        else {
+            // Geometry画像表示順序（前面／背面）設定
+            setGeometryOrder(order, dataObj.datasets, indexData, x_min, x_max, g_colorsBackGround[getColorIndex(oId, arrOidColors)]);                     
+        }
+    }
+    return indexData;
+}
+
+/**
  * グラフ描画
  * @param {number} low - 小さい方のスライダーつまみ位置（grid位置）
  * @param {number} high - 大きい方のスライダーつまみ位置（grid位置）
@@ -202,10 +361,8 @@ function getColorIndex(oId, arrColorsOid) {
  * @param {boolean} isCreateSlider - スライダーを描画するかどうか
  */
  function createGraph(low, high, sliderLow, sliderHigh, isCreateSlider) {
-    // グラフデータの解析
-    // const stringfyLineStrings = JSON.stringify(g_jsonLineStrings);
-    // const arrObjLineStrings = JSON.parse(stringfyLineStrings);
-    const arrObjLineStrings = g_jsonLineStrings;
+    // GeoJSONとして解析済みのグラフデータ
+    const arrObjGeometries = g_jsonGeometories;
     
     // coordinate
     let x = [];
@@ -224,35 +381,16 @@ function getColorIndex(oId, arrColorsOid) {
     let arrOidColors = new Object();
     let indexData = 0;
     // Chart のdataにグラフの値をセット
-    for (let i = 0; i < arrObjLineStrings.length; i++) {
+    for (let i = 0; i < arrObjGeometries.length; i++) {
         if (low <= i && i <= high) {
-            for (let j = 0; j < arrObjLineStrings[i].length; j++, indexData++) {
-                // OIDとタイムスタンプを一旦保存
-                setOidTimstampToObj(
-                    arrOidTimestamp, arrObjLineStrings[i][j].properties.oID, arrObjLineStrings[i][j].properties.timestamp);
-                dataObj.datasets[indexData] = new Object();
-                let oId = arrObjLineStrings[i][j].properties.oID;
-                dataObj.datasets[indexData].label = 'oID:' + oId;
-                dataObj.datasets[indexData].data = [];
-                // Coordinateを取得 
-                for (let k = 0; k < arrObjLineStrings[i][j].geometry.coordinates.length; k++) {
-                    x.push(arrObjLineStrings[i][j].geometry.coordinates[k][0]);
-                    y.push(arrObjLineStrings[i][j].geometry.coordinates[k][1]);
-                    let data = new Object();
-                    data.x = arrObjLineStrings[i][j].geometry.coordinates[k][0];
-                    data.y = arrObjLineStrings[i][j].geometry.coordinates[k][1];
-                    dataObj.datasets[indexData].data.push(data);
+            for (let j = 0; j < arrObjGeometries[i].length; j++, indexData++) {
+                // 図形種別を判別し、Data作成
+                if (arrObjGeometries[i][j].geometry.type == 'LineString') {
+                    indexData = setLineStringDatasets(dataObj, arrObjGeometries[i][j], arrOidTimestamp, arrOidColors, indexData, x, y);
                 }
-                // Geometryの各種表示用設定
-                dataObj.datasets[indexData].borderColor = g_colors[getColorIndex(oId, arrOidColors)];
-                dataObj.datasets[indexData].borderWidth = 2;
-                dataObj.datasets[indexData].pointBackgroundColor = g_colors[getColorIndex(oId, arrOidColors)];
-                dataObj.datasets[indexData].pointBorderColor = g_colors[getColorIndex(oId, arrOidColors)];
-                dataObj.datasets[indexData].pointRadius = 1;
-                dataObj.datasets[indexData].pointHoverRadius = 1;
-                dataObj.datasets[indexData].fill = false;
-                dataObj.datasets[indexData].tension = 0;
-                dataObj.datasets[indexData].showLine = true;
+                else if (arrObjGeometries[i][j].geometry.type == 'Polygon') {
+                    indexData = setPolygonDatasets(dataObj, arrObjGeometries[i][j], arrOidTimestamp, arrOidColors, indexData, x, y);
+                }
             }
         }
     }
@@ -352,7 +490,7 @@ function getColorIndex(oId, arrColorsOid) {
     ctx.fillText(Math.floor(x_range_max) + ',' + Math.floor(y_range_max), 515, 20 + adjustment); // 右上
     // 期間の位置（Window *** - ***）
     let ctxDivPeriod = document.getElementById('divperiod');
-    let oId = arrObjLineStrings[0][0].properties.oID;
+    let oId = arrObjGeometries[0][0].properties.oID;
     let period = arrOidTimestamp[oId][0] + ' - ' + arrOidTimestamp[oId][arrOidTimestamp[oId].length - 1];
     let periodTop = 530 + adjustment;
     ctxDivPeriod.innerHTML = 
