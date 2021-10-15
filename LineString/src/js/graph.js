@@ -226,7 +226,7 @@ function setGeometryOrder(order, datasets, index, x_min, x_max, color) {
     }
     // Geometryが1個のみの場合
     else {
-        datasets[index].backgroundColor = g_colorsBackGround[getColorIndex(oId, arrOidColors)];
+        datasets[index].backgroundColor = color;
     }
 }
 
@@ -286,21 +286,18 @@ function setPolygonDatasets(dataObj, objPolygon, arrOidTimestamp, arrOidColors, 
     // OIDとタイムスタンプを一旦保存
     setOidTimstampToObj(
         arrOidTimestamp, objPolygon.properties.oID, objPolygon.properties.timestamp);
-    let rest_flag = true;
-    let k = 0;
     let x_max = [Number.MIN_VALUE, Number.MIN_VALUE];
     let x_min = [Number.MAX_VALUE, Number.MAX_VALUE];
+    let oId = objPolygon.properties.oID;
     let order = 0;
-    while (rest_flag) {
+    for (let i = 0; ; i++) {
         dataObj.datasets[indexData] = new Object();
-        let oId = objPolygon.properties.oID;
         dataObj.datasets[indexData].label = 'oID:' + oId;
         dataObj.datasets[indexData].data = [];
-        rest_flag = false
         // Coordinateを取得
-        for (let k_org = k; k < objPolygon.geometry.coordinates.length; k++) {
-            let valueX = objPolygon.geometry.coordinates[k][0];
-            let valueY = objPolygon.geometry.coordinates[k][1];
+        for (let j = 0; j < objPolygon.geometry.coordinates[i].length; j++) {
+            let valueX = objPolygon.geometry.coordinates[i][j][0];
+            let valueY = objPolygon.geometry.coordinates[i][j][1];
             x.push(valueX);
             y.push(valueY);
             let data = new Object();
@@ -315,18 +312,6 @@ function setPolygonDatasets(dataObj, objPolygon, arrOidTimestamp, arrOidColors, 
             if (x_min[order] > valueX) {
                 x_min[order] = valueX;
             }
-            // 始点と終点が同一
-            if (k_org != k) {
-                if (objPolygon.geometry.coordinates[k_org][0] === objPolygon.geometry.coordinates[k][0]
-                    && objPolygon.geometry.coordinates[k_org][1] === objPolygon.geometry.coordinates[k][1]) {
-                    // 最後のCoordinateではない
-                    if (objPolygon.geometry.coordinates.length > (k + 1)) {
-                        k++;
-                        rest_flag = true;
-                        break;
-                    }
-                }
-            }
         }
         // Geometryの各種表示用設定
         dataObj.datasets[indexData].borderColor = g_colors[getColorIndex(oId, arrOidColors)];
@@ -338,17 +323,20 @@ function setPolygonDatasets(dataObj, objPolygon, arrOidTimestamp, arrOidColors, 
         dataObj.datasets[indexData].fill = true;
         dataObj.datasets[indexData].tension = 0;
         dataObj.datasets[indexData].showLine = true;
+        dataObj.datasets[indexData].order = 1;      // 前面／背面
+        dataObj.datasets[indexData].backgroundColor = g_colorWhite;
         // 続きがある
-        if (rest_flag) {                        
-            indexData++;
+        if ((i + 1) < objPolygon.geometry.coordinates.length) {
             order++;
+            indexData++;
         }
         // 続きが無い
         else {
-            // Geometry画像表示順序（前面／背面）設定
-            setGeometryOrder(order, dataObj.datasets, indexData, x_min, x_max, g_colorsBackGround[getColorIndex(oId, arrOidColors)]);                     
+            break;
         }
     }
+    // Geometry画像表示順序（前面／背面）設定
+    setGeometryOrder(order, dataObj.datasets, indexData, x_min, x_max, g_colorsBackGround[getColorIndex(oId, arrOidColors)]);                     
     return indexData;
 }
 
