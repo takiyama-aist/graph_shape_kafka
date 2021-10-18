@@ -341,6 +341,44 @@ function setPolygonDatasets(dataObj, objPolygon, arrOidTimestamp, arrOidColors, 
 }
 
 /**
+ * Point の dataObj.datasets を設定する
+ * @param {Object} dataObj dataObj
+ * @param {array} objPoint PointのGeoJSONデータ
+ * @param {array} arrOidTimestamp OIDを格納しているg_colorsに対応する配列（そのOIDがどの色か）
+ * @param {array} arrOidColors  OIDを格納しているg_colorsに対応する配列（そのOIDがどの色か）
+ * @param {number} indexData datasetsのインデックス
+ * @param {array} x xの配列
+ * @param {array} y yの配列
+ * @returns {number} indexData
+ */
+ function setPointDatasets(dataObj, objPoint, arrOidTimestamp, arrOidColors, indexData, x, y) {
+    // OIDとタイムスタンプを一旦保存
+    setOidTimstampToObj(
+        arrOidTimestamp, objPoint.properties.oID, objPoint.properties.timestamp);
+    dataObj.datasets[indexData] = new Object();
+    let oId = objPoint.properties.oID;
+    dataObj.datasets[indexData].label = 'oID:' + oId;
+    dataObj.datasets[indexData].data = [];
+    // Coordinateを取得（Pointの場合は1個のみ）
+    x.push(objPoint.geometry.coordinates[0]);
+    y.push(objPoint.geometry.coordinates[1]);
+    let data = new Object();
+    data.x = objPoint.geometry.coordinates[0];
+    data.y = objPoint.geometry.coordinates[1];
+    dataObj.datasets[indexData].data.push(data);
+    // Geometryの各種表示用設定
+    dataObj.datasets[indexData].borderColor = g_colors[getColorIndex(oId, arrOidColors)];
+    dataObj.datasets[indexData].borderWidth = 2;
+    dataObj.datasets[indexData].pointBackgroundColor = g_colors[getColorIndex(oId, arrOidColors)];
+    dataObj.datasets[indexData].pointBorderColor = g_colors[getColorIndex(oId, arrOidColors)];
+    dataObj.datasets[indexData].pointRadius = 3;
+    dataObj.datasets[indexData].pointHoverRadius = 3;
+    dataObj.datasets[indexData].fill = false;
+    dataObj.datasets[indexData].tension = 0;
+    dataObj.datasets[indexData].showLine = false;   
+    return indexData;
+}
+/**
  * グラフ描画
  * @param {number} low - 小さい方のスライダーつまみ位置（grid位置）
  * @param {number} high - 大きい方のスライダーつまみ位置（grid位置）
@@ -373,11 +411,16 @@ function setPolygonDatasets(dataObj, objPolygon, arrOidTimestamp, arrOidColors, 
         if (low <= i && i <= high) {
             for (let j = 0; j < arrObjGeometries[i].length; j++, indexData++) {
                 // 図形種別を判別し、Data作成
+                // LineString
                 if (arrObjGeometries[i][j].geometry.type == 'LineString') {
                     indexData = setLineStringDatasets(dataObj, arrObjGeometries[i][j], arrOidTimestamp, arrOidColors, indexData, x, y);
                 }
+                // Polygon
                 else if (arrObjGeometries[i][j].geometry.type == 'Polygon') {
                     indexData = setPolygonDatasets(dataObj, arrObjGeometries[i][j], arrOidTimestamp, arrOidColors, indexData, x, y);
+                }
+                else if (arrObjGeometries[i][j].geometry.type == 'Point') {
+                    indexData = setPointDatasets(dataObj, arrObjGeometries[i][j], arrOidTimestamp, arrOidColors, indexData, x, y);
                 }
             }
         }
